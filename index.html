@@ -394,6 +394,10 @@ function saveInv(inv){lsSet(LS_INV,inv);}
 function loadReqs(){return lsGet(LS_REQ,[]);}
 function saveReqs(r){lsSet(LS_REQ,r.slice(0,500));}
 function newRid(){return (Date.now().toString(36)+Math.random().toString(36).slice(2,7));}
+// Relay a scanned request to the inventory tracker via a private ntfy.sh topic
+// (the tracker runs on Dominic's PC and can't be reached directly). Fire-and-forget.
+const NTFY = "https://ntfy.sh/tdi-parts-req-a7f3k9x2q8m4";
+function relay(ev){ try{ fetch(NTFY,{method:"POST",body:JSON.stringify(ev),keepalive:true}).catch(()=>{}); }catch(_){} }
 
 let STATE = lsGet(LS_STATE,"SoCal"); if(!STATES.includes(STATE))STATE="SoCal";
 function setState(s){STATE=s;lsSet(LS_STATE,s);}
@@ -413,6 +417,7 @@ function doRequest(id,state,qty,size,requester){
   const e={rid:newRid(),id,name:it.name,qty,state,requester:requester||"TDI Technician",size:size||"",
     onHandAtRequest:it.onHand,flagged,kind:it.stock?"request":"checkout",at:new Date().toISOString()};
   const reqs=loadReqs();reqs.unshift(e);saveReqs(reqs);
+  relay(e);
   if(it.stock)patchRec(id,state,{onHand:Math.max(0,(+it.onHand||0)-qty)});
   return merge(id,state);
 }
@@ -424,7 +429,7 @@ function doReturn(id,state){patchRec(id,state,{custody:{holder:null,returnedAt:n
 function doReorder(id,state){const it=merge(id,state);
   const e={rid:newRid(),id,name:it.name,qty:Math.max(1,(+it.full||1)-(+it.onHand||0)),state,requester:"TDI Technician",
     size:"",onHandAtRequest:it.onHand,flagged:true,kind:"reorder",at:new Date().toISOString()};
-  const reqs=loadReqs();reqs.unshift(e);saveReqs(reqs);}
+  const reqs=loadReqs();reqs.unshift(e);saveReqs(reqs);relay(e);}
 function setReqFlag(rid,flag,val){const reqs=loadReqs();const r=reqs.find(x=>x.rid===rid);
   if(r){r[flag]=val;r[flag+"At"]=val?new Date().toISOString():"";saveReqs(reqs);}}
 
